@@ -179,6 +179,38 @@ export default function App() {
     setFilters(INITIAL_FILTERS);
   };
 
+  // Load data for custom map viewport (when user pans/zooms map)
+  const handleSearchBbox = useCallback(async (bbox) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchClupaFeatures({
+        bbox,
+        designations: filters.designations,
+        keyword: filters.keyword,
+        limit: 120
+      });
+      const loadedFeatures = data.features || [];
+      setFeatures(loadedFeatures);
+
+      const ogfIds = loadedFeatures
+        .map(f => f.properties?.OGF_ID)
+        .filter(Boolean)
+        .slice(0, 60);
+
+      if (ogfIds.length > 0) {
+        batchFetchPermittedUses(ogfIds).then(usesMap => {
+          setPermittedUsesMap(prev => ({ ...prev, ...usesMap }));
+        }).catch(e => console.warn(e));
+      }
+      setLoading(false);
+    } catch (err) {
+      console.error('Error querying viewport bbox:', err);
+      setError('Unable to fetch Crown Land features for this area.');
+      setLoading(false);
+    }
+  }, [filters.designations, filters.keyword]);
+
   return (
     <div className="app-container">
       {/* Global Header */}
@@ -209,7 +241,7 @@ export default function App() {
         />
 
         {/* Content Area */}
-        <main className="content-area">
+        <main className={`content-area ${viewMode === 'split' ? 'is-split-view' : ''}`}>
           {/* View Mode Bar */}
           <div className="view-mode-bar" id="view-mode-bar">
             <button
@@ -281,6 +313,12 @@ export default function App() {
                   }}
                   mapCenter={mapCenter}
                   mapZoom={mapZoom}
+                  isSplitView={viewMode === 'split'}
+                  onSearchBbox={handleSearchBbox}
+                  currentDistrict={currentDistrict}
+                  onSelectDistrict={(distId) => {
+                    setFilters(prev => ({ ...prev, districtId: distId }));
+                  }}
                 />
               </div>
             )}

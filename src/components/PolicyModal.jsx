@@ -12,6 +12,85 @@ function getDesignationBadgeClass(designation) {
   return found ? found.badgeClass : 'badge-general';
 }
 
+export function getLandStatusInfo(designation = '', ident = '') {
+  const d = designation.toLowerCase();
+  const id = ident.toUpperCase();
+
+  if (d.includes('park') || id.startsWith('P') || id.startsWith('PP')) {
+    return {
+      type: 'park',
+      badge: 'Ontario Provincial Park',
+      badgeClass: 'badge-park',
+      headline: '🏞️ Ontario Provincial Park',
+      headlineSubtitle: 'Regulated Protected Area (Ontario Parks)',
+      tagline: 'Strict conservation area managed under the Provincial Parks and Conservation Reserves Act. Standard Crown land dispersed recreation does not apply.',
+      campingNotice: 'Designated campsite reservation & Ontario Parks permit required. Random/dispersed Crown land camping is NOT permitted.',
+      huntingNotice: 'Hunting is prohibited or strictly limited to specific designated wildlife seasons by park regulation.',
+      accessNotice: 'Motorized vehicles (ATVs, snowmobiles, trucks) restricted to authorized public park roads only.',
+      isCrownFreeCamp: false
+    };
+  }
+
+  if (d.includes('conservation') || id.startsWith('C')) {
+    return {
+      type: 'conservation',
+      badge: 'Conservation Reserve',
+      badgeClass: 'badge-conservation',
+      headline: '🛡️ Conservation Reserve',
+      headlineSubtitle: 'Protected Public Land (Non-Operating Nature Reserve)',
+      tagline: 'Permanently protected public land preserving significant natural ecosystems. Traditional low-impact public recreation is welcomed.',
+      campingNotice: 'Free 21-day dispersed camping permitted for Canadian residents (practice Leave-No-Trace). Commercial development prohibited.',
+      huntingNotice: 'Hunting, trapping, and angling permitted under standard provincial Fish & Wildlife regulations and open seasons.',
+      accessNotice: 'Existing recreational trails, portages, and water access routes permitted. New road construction is prohibited.',
+      isCrownFreeCamp: true
+    };
+  }
+
+  if (d.includes('enhanced') || id.startsWith('E')) {
+    return {
+      type: 'enhanced',
+      badge: 'Enhanced Management Area',
+      badgeClass: 'badge-enhanced',
+      headline: '🧭 Enhanced Management Area (EMA)',
+      headlineSubtitle: 'Multi-Use Public Crown Land with Special Guidelines',
+      tagline: 'Public Crown land specifically managed to safeguard remote recreation, fish/wildlife corridors, or intensive forestry.',
+      campingNotice: 'Free 21-day dispersed camping permitted for Canadian residents, subject to local resource guidelines.',
+      huntingNotice: 'Hunting, trapping, angling, and traditional outdoor recreation permitted under provincial game seasons.',
+      accessNotice: 'Motorized trail and road access permitted; certain seasonal access restrictions may apply to protect remote values.',
+      isCrownFreeCamp: true
+    };
+  }
+
+  if (d.includes('forest') || id.startsWith('F')) {
+    return {
+      type: 'forest',
+      badge: 'Forest Reserve',
+      badgeClass: 'badge-forest',
+      headline: '🌳 Forest Reserve',
+      headlineSubtitle: 'Interim Protected Public Land',
+      tagline: 'Public Crown land proposed for future park or conservation reserve status while accommodating pre-existing mineral rights or mining claims.',
+      campingNotice: 'Free 21-day dispersed Crown land camping permitted for Canadian residents.',
+      huntingNotice: 'Hunting, fishing, and traditional outdoor recreation permitted under provincial regulations.',
+      accessNotice: 'Recreational access permitted; please respect active mineral claims and exploration work.',
+      isCrownFreeCamp: true
+    };
+  }
+
+  // Default: General Use Area
+  return {
+    type: 'general',
+    badge: 'Public Crown Land',
+    badgeClass: 'badge-general',
+    headline: '🌲 Public Crown Land (General Use Area)',
+    headlineSubtitle: 'Open Ontario Public Land (Multi-Use Area)',
+    tagline: 'The primary public land resource across Ontario, managed for sustainable multi-use outdoor recreation, forestry, and resource exploration.',
+    campingNotice: 'Free 21-day dispersed camping allowed for Canadian residents on any one site per calendar year.',
+    huntingNotice: 'Hunting, trapping, and fishing fully permitted under standard provincial game open seasons and bag limits.',
+    accessNotice: 'Motorized vehicle access (ATVs, snowmobiles, dirt bikes, 4x4s) permitted on existing Crown roads and trails.',
+    isCrownFreeCamp: true
+  };
+}
+
 export default function PolicyModal({ feature, onClose }) {
   if (!feature) return null;
 
@@ -20,6 +99,8 @@ export default function PolicyModal({ feature, onClose }) {
   const name = props.NAME_ENG || 'Crown Land Area';
   const desig = props.DESIGNATION_ENG || 'General Use Area';
   const ogfId = props.OGF_ID;
+
+  const statusInfo = getLandStatusInfo(desig, ident);
 
   const [loading, setLoading] = useState(true);
   const [policyData, setPolicyData] = useState(null);
@@ -138,6 +219,47 @@ export default function PolicyModal({ feature, onClose }) {
             </div>
           ) : (
             <>
+              {/* 0. Plain-English Land Status Headline Card (Tester Feedback: instant headline of park, private, or crown land) */}
+              <div className={`land-status-card status-${statusInfo.type}`}>
+                <div className="status-card-header">
+                  <div>
+                    <h3 className="status-card-headline">{statusInfo.headline}</h3>
+                    <div className="status-card-subtitle">{statusInfo.headlineSubtitle}</div>
+                  </div>
+                  <span className={`status-pill ${statusInfo.badgeClass}`}>
+                    {statusInfo.badge}
+                  </span>
+                </div>
+
+                <p className="status-card-tagline">{statusInfo.tagline}</p>
+
+                <div className="status-key-points-grid">
+                  <div className="status-point-item">
+                    <span className="status-point-icon">⛺</span>
+                    <div>
+                      <div className="status-point-label">Camping Rules</div>
+                      <div className="status-point-text">{statusInfo.campingNotice}</div>
+                    </div>
+                  </div>
+
+                  <div className="status-point-item">
+                    <span className="status-point-icon">🎯</span>
+                    <div>
+                      <div className="status-point-label">Hunting & Angling</div>
+                      <div className="status-point-text">{statusInfo.huntingNotice}</div>
+                    </div>
+                  </div>
+
+                  <div className="status-point-item">
+                    <span className="status-point-icon">🚙</span>
+                    <div>
+                      <div className="status-point-label">Trail & Vehicle Access</div>
+                      <div className="status-point-text">{statusInfo.accessNotice}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* 1. Government Management Intent (Collapsible Accordion - collapsed by default so Area Description is immediately visible) */}
               {policyData?.LAND_USE_INTENT_DESCR_ENG && (
                 <div className="policy-block">

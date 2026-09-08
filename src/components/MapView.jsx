@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { Layers, Crosshair, ZoomIn, ZoomOut, Maximize2, Flame, Trees, ShieldAlert, Sparkles, X, Check } from 'lucide-react';
+import { Layers, Crosshair, ZoomIn, ZoomOut, Maximize2, Flame, Trees, ShieldAlert, Sparkles, X, Check, RotateCw, Palette, ChevronDown, MapPin } from 'lucide-react';
 import { LAND_DESIGNATIONS } from '../data/activities';
 import { fetchWmuFeatures, fetchUnpatentedParcels, fetchRestrictedFireZones } from '../services/clupaApi';
+import { MNR_DISTRICTS } from '../data/districts';
 
 // Free, public basemap tiles without API keys or watermarks
 const BASEMAPS = {
@@ -44,7 +45,11 @@ export default function MapView({
   onSelectFeature,
   mapCenter = [45.35, -80.03],
   mapZoom = 9,
-  onBoundsChange
+  onBoundsChange,
+  isSplitView = false,
+  onSearchBbox,
+  currentDistrict,
+  onSelectDistrict
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -65,6 +70,9 @@ export default function MapView({
   });
   const [loadingOverlay, setLoadingOverlay] = useState(null); // 'wmu' | 'unpatented' | 'rfz' | null
   const [mobileLayersOpen, setMobileLayersOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [showSearchThisArea, setShowSearchThisArea] = useState(false);
+  const [districtMenuOpen, setDistrictMenuOpen] = useState(false);
 
   const activeOverlayCount = Object.values(activeOverlays).filter(Boolean).length;
 
@@ -440,69 +448,115 @@ export default function MapView({
     }
   };
 
+  // Reset search this area when features or center changes
+  useEffect(() => {
+    setShowSearchThisArea(false);
+  }, [features, mapCenter]);
+
+  // Set showSearchThisArea on map pan/zoom
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+
+    const handleMove = () => {
+      setShowSearchThisArea(true);
+    };
+
+    map.on('dragend', handleMove);
+    map.on('zoomend', handleMove);
+
+    return () => {
+      map.off('dragend', handleMove);
+      map.off('zoomend', handleMove);
+    };
+  }, []);
+
   return (
     <div className="map-view-container" id="map-view-container">
       {/* Map DOM Element */}
       <div ref={mapContainerRef} className="map-element" id="leaflet-map" />
 
-      {/* Desktop Controls (Hidden on Mobile) */}
-      <div className="map-desktop-controls">
-        {/* Basemap Switcher (Top Right) */}
-        <div className="map-basemap-selector" id="basemap-selector">
-          {Object.keys(BASEMAPS).map((key) => (
+      {/* Floating "Search This Map Area" Button (Triggered when user pans/zooms map) */}
+      {showSearchThisArea && (
+        <button
+          id="btn-search-this-area"
+          className="btn-search-this-area"
+          onClick={() => {
+            if (!mapInstanceRef.current) return;
+            const bounds = mapInstanceRef.current.getBounds();
+            const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+            if (onSearchBbox) {
+              onSearchBbox(bbox);
+            }
+            setShowSearchThisArea(false);
+          }}
+          title="Load Crown Land policies for the currently visible map viewport"
+        >
+          <RotateCw size={14} />
+          <span>Search This Map Area</span>
+        </button>
+      )}
+
+      {/* Desktop Controls (Hidden in Split View or on Mobile to avoid any menu collision) */}
+      {!isSplitView && (
+        <div className="map-desktop-controls">
+          {/* Basemap Switcher (Top Right) */}
+          <div className="map-basemap-selector" id="basemap-selector">
+            {Object.keys(BASEMAPS).map((key) => (
+              <button
+                key={key}
+                id={`basemap-${key}`}
+                className={`basemap-btn ${activeBasemap === key ? 'active' : ''}`}
+                onClick={() => setActiveBasemap(key)}
+              >
+                {BASEMAPS[key].name}
+              </button>
+            ))}
+          </div>
+
+          {/* Map Overlays Toolbar (Stacked below Basemaps) */}
+          <div className="map-overlay-selector" id="map-overlay-selector">
+            <span className="overlay-selector-label">Overlays:</span>
             <button
-              key={key}
-              id={`basemap-${key}`}
-              className={`basemap-btn ${activeBasemap === key ? 'active' : ''}`}
-              onClick={() => setActiveBasemap(key)}
+              id="overlay-btn-wmu"
+              className={`overlay-chip-btn ${activeOverlays.wmu ? 'active-wmu' : ''}`}
+              onClick={() => toggleOverlay('wmu')}
+              title="Toggle Wildlife Management Units (WMU) Hunting Boundaries"
             >
-              {BASEMAPS[key].name}
+              <Crosshair size={13} />
+              <span>WMU Units</span>
+              {loadingOverlay === 'wmu' && <span className="spinner" style={{ width: 10, height: 10 }} />}
             </button>
-          ))}
+
+            <button
+              id="overlay-btn-unpatented"
+              className={`overlay-chip-btn ${activeOverlays.unpatented ? 'active-unpatented' : ''}`}
+              onClick={() => toggleOverlay('unpatented')}
+              title="Toggle Unpatented Crown Land Parcels (Exact Public Tenure vs Private Lots)"
+            >
+              <Trees size={13} />
+              <span>Public Parcels</span>
+              {loadingOverlay === 'unpatented' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+            </button>
+
+            <button
+              id="overlay-btn-rfz"
+              className={`overlay-chip-btn ${activeOverlays.rfz ? 'active-rfz' : ''}`}
+              onClick={() => toggleOverlay('rfz')}
+              title="Toggle Restricted Fire Zones (Active Fire Bans & Campfire Prohibitions)"
+            >
+              <Flame size={13} />
+              <span>Fire Bans (RFZ)</span>
+              {loadingOverlay === 'rfz' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+            </button>
+          </div>
         </div>
+      )}
 
-        {/* Map Overlays Toolbar (Stacked below Basemaps) */}
-        <div className="map-overlay-selector" id="map-overlay-selector">
-          <span className="overlay-selector-label">Overlays:</span>
-          <button
-            id="overlay-btn-wmu"
-            className={`overlay-chip-btn ${activeOverlays.wmu ? 'active-wmu' : ''}`}
-            onClick={() => toggleOverlay('wmu')}
-            title="Toggle Wildlife Management Units (WMU) Hunting Boundaries"
-          >
-            <Crosshair size={13} />
-            <span>WMU Units</span>
-            {loadingOverlay === 'wmu' && <span className="spinner" style={{ width: 10, height: 10 }} />}
-          </button>
-
-          <button
-            id="overlay-btn-unpatented"
-            className={`overlay-chip-btn ${activeOverlays.unpatented ? 'active-unpatented' : ''}`}
-            onClick={() => toggleOverlay('unpatented')}
-            title="Toggle Unpatented Crown Land Parcels (Exact Public Tenure vs Private Lots)"
-          >
-            <Trees size={13} />
-            <span>Public Parcels</span>
-            {loadingOverlay === 'unpatented' && <span className="spinner" style={{ width: 10, height: 10 }} />}
-          </button>
-
-          <button
-            id="overlay-btn-rfz"
-            className={`overlay-chip-btn ${activeOverlays.rfz ? 'active-rfz' : ''}`}
-            onClick={() => toggleOverlay('rfz')}
-            title="Toggle Restricted Fire Zones (Active Fire Bans & Campfire Prohibitions)"
-          >
-            <Flame size={13} />
-            <span>Fire Bans (RFZ)</span>
-            {loadingOverlay === 'rfz' && <span className="spinner" style={{ width: 10, height: 10 }} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Layer Settings Button (Top Right on Mobile) */}
+      {/* Layer Settings Button (Visible on Mobile OR in Split View to prevent collision) */}
       <button
         id="btn-mobile-layers"
-        className={`mobile-layers-btn ${mobileLayersOpen ? 'active' : ''}`}
+        className={`mobile-layers-btn ${mobileLayersOpen ? 'active' : ''} ${isSplitView ? 'split-view-visible' : ''}`}
         onClick={() => setMobileLayersOpen(!mobileLayersOpen)}
         aria-label="Map layers and basemaps"
         title="Toggle Map Basemaps and Overlays"
@@ -514,7 +568,7 @@ export default function MapView({
         )}
       </button>
 
-      {/* Mobile Layers Drawer / Popover */}
+      {/* Layers Drawer / Popover */}
       {mobileLayersOpen && (
         <div className="mobile-layers-popover" id="mobile-layers-popover">
           <div className="mobile-layers-header">
@@ -616,7 +670,153 @@ export default function MapView({
         </div>
       )}
 
-      {/* Map Control Buttons */}
+      {/* Floating Bottom Left Toolbar: Legend & District Quick Switcher */}
+      <div className="map-bottom-left-bar" id="map-bottom-left-bar">
+        {/* Map Legend Button */}
+        <button
+          id="btn-map-legend"
+          className={`map-legend-btn ${legendOpen ? 'active' : ''}`}
+          onClick={() => setLegendOpen(!legendOpen)}
+          title="View Crown Land Map Designation Legend"
+        >
+          <Palette size={14} />
+          <span>Legend</span>
+        </button>
+
+        {/* Quick District Switcher Pill */}
+        <div className="district-quick-jump">
+          <button
+            id="btn-district-jump"
+            className="btn-district-jump"
+            onClick={() => setDistrictMenuOpen(!districtMenuOpen)}
+            title="Switch MNR District across Ontario"
+          >
+            <MapPin size={13} className="text-emerald" />
+            <span>{currentDistrict ? currentDistrict.name : 'Explore District'}</span>
+            <ChevronDown size={13} />
+          </button>
+
+          {districtMenuOpen && (
+            <div className="district-dropdown-popover" id="district-dropdown-popover">
+              <div className="district-dropdown-header">
+                <span>Select Ontario District</span>
+                <button className="btn-close-popover" onClick={() => setDistrictMenuOpen(false)}>
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="district-dropdown-list">
+                {MNR_DISTRICTS.map(d => (
+                  <button
+                    key={d.id}
+                    className={`district-dropdown-item ${currentDistrict?.id === d.id ? 'active' : ''}`}
+                    onClick={() => {
+                      if (onSelectDistrict) onSelectDistrict(d.id);
+                      setDistrictMenuOpen(false);
+                      setShowSearchThisArea(false);
+                    }}
+                  >
+                    <span>{d.name}</span>
+                    <span className="district-dropdown-region">{d.region}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Floating Map Legend Popover */}
+      {legendOpen && (
+        <div className="map-legend-popover" id="map-legend-popover">
+          <div className="map-legend-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Palette size={15} className="text-emerald" />
+              <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>Crown Land Map Legend</span>
+            </div>
+            <button
+              className="btn-close-popover"
+              onClick={() => setLegendOpen(false)}
+              aria-label="Close legend"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          <div className="legend-items-list">
+            <div className="legend-item">
+              <span className="legend-swatch" style={{ background: '#10b981' }} />
+              <div>
+                <div className="legend-name">General Use Area</div>
+                <div className="legend-sub">Public Crown land • Free 21-day camping allowed</div>
+              </div>
+            </div>
+
+            <div className="legend-item">
+              <span className="legend-swatch" style={{ background: '#38bdf8' }} />
+              <div>
+                <div className="legend-name">Enhanced Management (EMA)</div>
+                <div className="legend-sub">Multi-use Crown land • Specific recreation/resource rules</div>
+              </div>
+            </div>
+
+            <div className="legend-item">
+              <span className="legend-swatch" style={{ background: '#f59e0b' }} />
+              <div>
+                <div className="legend-name">Conservation Reserve</div>
+                <div className="legend-sub">Protected nature reserve • Traditional recreation permitted</div>
+              </div>
+            </div>
+
+            <div className="legend-item">
+              <span className="legend-swatch" style={{ background: '#fb7185' }} />
+              <div>
+                <div className="legend-name">Provincial Park</div>
+                <div className="legend-sub">Regulated park • Ontario Parks permit & fee required</div>
+              </div>
+            </div>
+
+            <div className="legend-item">
+              <span className="legend-swatch" style={{ background: '#c084fc' }} />
+              <div>
+                <div className="legend-name">Forest Reserve</div>
+                <div className="legend-sub">Interim protected land with active mining rights</div>
+              </div>
+            </div>
+
+            <div className="legend-divider" />
+
+            <div className="legend-item">
+              <span className="legend-swatch-line" style={{ borderColor: '#f59e0b', borderStyle: 'dashed' }} />
+              <div>
+                <div className="legend-name">WMU Hunting Boundaries</div>
+                <div className="legend-sub">Wildlife Management Units (hunting seasons & tags)</div>
+              </div>
+            </div>
+
+            <div className="legend-item">
+              <span className="legend-swatch" style={{ background: '#06b6d4', opacity: 0.5 }} />
+              <div>
+                <div className="legend-name">Public Crown Parcels</div>
+                <div className="legend-sub">Verified public Crown tenure vs private patented lots</div>
+              </div>
+            </div>
+
+            <div className="legend-item">
+              <span className="legend-swatch-line" style={{ borderColor: '#ef4444', borderStyle: 'dashed' }} />
+              <div>
+                <div className="legend-name">Fire Bans (RFZ)</div>
+                <div className="legend-sub">Restricted fire zones (active campfire prohibitions)</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="legend-footer-tip">
+            💡 <em>Tap any colored area on the map to see its full policy and camping rules.</em>
+          </div>
+        </div>
+      )}
+
+      {/* Map Control Buttons (Bottom Right) */}
       <div style={{ position: 'absolute', bottom: 85, right: 10, zIndex: 500, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
           id="btn-fit-bounds"
