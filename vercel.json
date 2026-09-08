@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api-lio/:path*",
+      "destination": "https://ws.lioservices.lrc.gov.on.ca/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
