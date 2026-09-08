@@ -8,8 +8,7 @@ export default function Header({
   onOpenGuide,
   sidebarOpen,
   onToggleSidebar,
-  matchingCount,
-  loading
+  activeFilterCount = 0
 }) {
   return (
     <header className="app-header" id="app-header">
@@ -62,12 +61,12 @@ export default function Header({
           id="btn-toggle-sidebar"
           className="btn-header"
           onClick={onToggleSidebar}
-          title="Toggle Filters Panel"
+          title={activeFilterCount > 0 ? `Toggle Filters Panel (${activeFilterCount} active)` : "Toggle Filters Panel"}
         >
           <SlidersHorizontal size={16} />
           <span>Filters</span>
-          {matchingCount !== null && (
-            <span className="filter-count-badge">{matchingCount}</span>
+          {activeFilterCount > 0 && (
+            <span className="active-filters-count">{activeFilterCount}</span>
           )}
         </button>
       </div>

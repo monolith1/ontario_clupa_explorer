@@ -2,10 +2,34 @@
 // Coordinates and approximate bounding boxes [west, south, east, north]
 
 export const MNR_REGIONS = [
-  { id: 'all', name: 'All Ontario Regions' },
-  { id: 'Southern', name: 'Southern Region' },
-  { id: 'Northeast', name: 'Northeast Region' },
-  { id: 'Northwest', name: 'Northwest Region' },
+  {
+    id: 'all',
+    name: 'All Ontario Regions',
+    center: [47.5, -84.5],
+    zoom: 5,
+    bbox: [-95.2, 43.5, -74.5, 53.0]
+  },
+  {
+    id: 'Southern',
+    name: 'Southern Region',
+    center: [45.1, -78.6],
+    zoom: 7,
+    bbox: [-81.5, 43.8, -75.8, 46.4]
+  },
+  {
+    id: 'Northeast',
+    name: 'Northeast Region',
+    center: [47.8, -82.2],
+    zoom: 6,
+    bbox: [-86.0, 45.8, -79.0, 51.5]
+  },
+  {
+    id: 'Northwest',
+    name: 'Northwest Region',
+    center: [49.6, -91.0],
+    zoom: 6,
+    bbox: [-95.2, 47.8, -86.0, 52.5]
+  },
 ];
 
 export const MNR_DISTRICTS = [

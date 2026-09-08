@@ -9,7 +9,13 @@ A modern, fast, and intuitive explorer for the **Ontario Crown Land Use Policy A
 ## ✨ Features
 
 ### 🔍 Filter-First Activity Finder
-Unlike the legacy atlas, start directly with the activities you care about. Toggle permission levels (**Permitted / Yes**, **Conditional / Maybe**, or **Prohibited / No**) for:
+Unlike the legacy atlas, start directly with the activities you care about. Toggle permission levels per activity:
+* **Any**: No filter (ignores this activity).
+* **Yes**: Permitted without special discretionary approval.
+* **Maybe**: Conditional (subject to Ministry guidelines, seasonal rules, or permits).
+* **No**: Strictly prohibited.
+
+Supported activities include:
 * ⛺ **Crown Land Camping**: Dispersed backcountry camping on public land.
 * 🎯 **Hunting**: Big game, small game, and waterfowl according to WMU seasons.
 * 🎣 **Sport Fishing**: Angling across inland waterways and lakes.

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, RotateCcw, MapPin, Layers, Sparkles, Tent, Crosshair, Fish, Compass, Navigation, Snowflake, Footprints, Anchor, Apple, Pickaxe, Trees, Home } from 'lucide-react';
+import { Search, X, RotateCcw, RotateCw, MapPin, Layers, Sparkles, Tent, Crosshair, Fish, Compass, Navigation, Snowflake, Footprints, Anchor, Apple, Pickaxe, Trees, Home } from 'lucide-react';
 import { MNR_REGIONS, MNR_DISTRICTS, POPULAR_TOWNS } from '../data/districts';
 import { ACTIVITIES, LAND_DESIGNATIONS } from '../data/activities';
 
@@ -23,6 +23,8 @@ export default function FilterPanel({
   filters,
   onChangeFilters,
   onResetFilters,
+  onApplyFilters,
+  hasPendingChanges = false,
   onSelectTown,
   matchingCount,
   loading,
@@ -94,8 +96,8 @@ export default function FilterPanel({
           <Layers size={18} className="text-emerald" />
           <h2 className="sidebar-title">Filters & Activities</h2>
           {matchingCount !== null && (
-            <span className="filter-count-badge" id="results-count-badge">
-              {loading ? '...' : matchingCount}
+            <span className="sidebar-results-badge" id="results-count-badge">
+              {loading ? '...' : `${matchingCount} areas`}
             </span>
           )}
         </div>
@@ -140,6 +142,11 @@ export default function FilterPanel({
               placeholder="e.g. G362, Nestor Falls, Parry Sound..."
               value={keyword}
               onChange={handleTextChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && onApplyFilters) {
+                  onApplyFilters();
+                }
+              }}
             />
             {keyword && (
               <button
@@ -248,8 +255,8 @@ export default function FilterPanel({
             <span>Permitted Activities & Uses</span>
             <Sparkles size={14} style={{ color: 'var(--emerald-primary)' }} />
           </div>
-          <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: 4 }}>
-            Toggle whether each activity must be Permitted (Yes), Conditional (Maybe), or Prohibited (No).
+          <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.45, marginBottom: 6 }}>
+            Toggle required status: <strong>Any</strong> (no filter), <strong>Yes</strong> (permitted), <strong>Maybe</strong> (conditional / subject to guidelines & permits), or <strong>No</strong> (prohibited).
           </p>
 
           <div className="activity-filters-container">
@@ -278,28 +285,28 @@ export default function FilterPanel({
                     <button
                       className={`status-pill ${currentStatus === 'any' ? 'active-any' : ''}`}
                       onClick={() => handleActivityStatusChange(activity.id, 'any')}
-                      title="No restriction on this activity"
+                      title="Any: No filter on this activity (neutral)"
                     >
                       Any
                     </button>
                     <button
                       className={`status-pill ${currentStatus === 'Yes' ? 'active-yes' : ''}`}
                       onClick={() => handleActivityStatusChange(activity.id, 'Yes')}
-                      title="Must be explicitly permitted (Yes)"
+                      title="Yes: Must be explicitly permitted by provincial policy"
                     >
                       Yes
                     </button>
                     <button
                       className={`status-pill ${currentStatus === 'Maybe' ? 'active-maybe' : ''}`}
                       onClick={() => handleActivityStatusChange(activity.id, 'Maybe')}
-                      title="Conditional / with guidelines"
+                      title="Maybe: Must be conditional (requires permits, seasonal rules, or local guidelines)"
                     >
                       Maybe
                     </button>
                     <button
                       className={`status-pill ${currentStatus === 'No' ? 'active-no' : ''}`}
                       onClick={() => handleActivityStatusChange(activity.id, 'No')}
-                      title="Prohibited / Not permitted"
+                      title="No: Must be strictly prohibited / not permitted"
                     >
                       No
                     </button>
@@ -311,14 +318,36 @@ export default function FilterPanel({
         </section>
       </div>
 
-      {/* Mobile Sticky Action Footer */}
-      <div className="sidebar-mobile-footer">
+      {/* Search & Apply Action Footer */}
+      <div className="sidebar-action-footer">
         <button
-          id="btn-apply-filters-mobile"
-          className="btn-sidebar-apply"
-          onClick={onCloseMobile}
+          id="btn-apply-filters"
+          className={`btn-sidebar-apply ${loading ? 'loading' : ''} ${hasPendingChanges ? 'has-pending' : ''}`}
+          onClick={() => {
+            if (onApplyFilters) onApplyFilters();
+            if (typeof window !== 'undefined' && window.innerWidth <= 900 && onCloseMobile) {
+              onCloseMobile();
+            }
+          }}
+          title={hasPendingChanges ? "Click to apply your filter changes" : "Apply filters and refresh map search"}
         >
-          <span>View {loading ? '...' : (matchingCount ?? 0)} Areas on Map</span>
+          {loading ? (
+            <>
+              <RotateCw size={15} className="spin-icon" />
+              <span>Searching Ontario Crown Land...</span>
+            </>
+          ) : hasPendingChanges ? (
+            <>
+              <Search size={15} />
+              <span>Apply Filters & Search</span>
+              <span className="pending-indicator-dot" />
+            </>
+          ) : (
+            <>
+              <Search size={15} />
+              <span>Search Areas ({matchingCount ?? 0})</span>
+            </>
+          )}
         </button>
       </div>
     </aside>

@@ -49,6 +49,7 @@ export default function MapView({
   isSplitView = false,
   onSearchBbox,
   currentDistrict,
+  currentRegion,
   onSelectDistrict
 }) {
   const mapContainerRef = useRef(null);
@@ -70,7 +71,9 @@ export default function MapView({
   });
   const [loadingOverlay, setLoadingOverlay] = useState(null); // 'wmu' | 'unpatented' | 'rfz' | null
   const [mobileLayersOpen, setMobileLayersOpen] = useState(false);
-  const [legendOpen, setLegendOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth > 1024 : false;
+  });
   const [showSearchThisArea, setShowSearchThisArea] = useState(false);
   const [districtMenuOpen, setDistrictMenuOpen] = useState(false);
 
@@ -448,10 +451,15 @@ export default function MapView({
     }
   };
 
-  // Reset search this area when features or center changes
+  // Reset search this area and fly to center/zoom when district or region changes
   useEffect(() => {
     setShowSearchThisArea(false);
-  }, [features, mapCenter]);
+    if (!mapInstanceRef.current || !mapCenter) return;
+    mapInstanceRef.current.flyTo(mapCenter, mapZoom, {
+      duration: 1.1,
+      easeLinearity: 0.25
+    });
+  }, [mapCenter, mapZoom]);
 
   // Set showSearchThisArea on map pan/zoom
   useEffect(() => {
@@ -548,6 +556,22 @@ export default function MapView({
               <Flame size={13} />
               <span>Fire Bans (RFZ)</span>
               {loadingOverlay === 'rfz' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+            </button>
+
+            <div style={{ width: 1, height: 16, background: 'var(--border-subtle)', margin: '0 2px' }} />
+
+            {/* Map Legend Toggle Button */}
+            <button
+              id="btn-toggle-legend-top"
+              className={`overlay-chip-btn ${legendOpen ? 'active-legend' : ''}`}
+              onClick={() => setLegendOpen(prev => !prev)}
+              title="Show or hide the on-map Crown Land Legend"
+            >
+              <Palette size={13} className={legendOpen ? 'text-emerald' : ''} />
+              <span>Legend</span>
+              <span className={`toggle-status-mini ${legendOpen ? 'on' : 'off'}`}>
+                {legendOpen ? 'ON' : 'OFF'}
+              </span>
             </button>
           </div>
         </div>
@@ -665,6 +689,27 @@ export default function MapView({
                   </span>
                 )}
               </button>
+
+              <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+
+              <button
+                className={`mobile-overlay-row ${legendOpen ? 'active-legend' : ''}`}
+                onClick={() => {
+                  setLegendOpen(prev => !prev);
+                  setMobileLayersOpen(false);
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <Palette size={15} className="text-emerald" />
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.84rem' }}>Map Legend</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Show designation colors on map</div>
+                  </div>
+                </div>
+                <span className={`toggle-pill ${legendOpen ? 'on-legend' : 'off'}`}>
+                  {legendOpen ? 'ON' : 'OFF'}
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -692,7 +737,7 @@ export default function MapView({
             title="Switch MNR District across Ontario"
           >
             <MapPin size={13} className="text-emerald" />
-            <span>{currentDistrict ? currentDistrict.name : 'Explore District'}</span>
+            <span>{currentDistrict ? currentDistrict.name : (currentRegion && currentRegion.id !== 'all' ? currentRegion.name : 'Explore District')}</span>
             <ChevronDown size={13} />
           </button>
 
@@ -783,31 +828,41 @@ export default function MapView({
               </div>
             </div>
 
-            <div className="legend-divider" />
+            {activeOverlayCount > 0 && (
+              <>
+                <div className="legend-divider" />
 
-            <div className="legend-item">
-              <span className="legend-swatch-line" style={{ borderColor: '#f59e0b', borderStyle: 'dashed' }} />
-              <div>
-                <div className="legend-name">WMU Hunting Boundaries</div>
-                <div className="legend-sub">Wildlife Management Units (hunting seasons & tags)</div>
-              </div>
-            </div>
+                {activeOverlays.wmu && (
+                  <div className="legend-item">
+                    <span className="legend-swatch-line" style={{ borderColor: '#f59e0b', borderStyle: 'dashed' }} />
+                    <div>
+                      <div className="legend-name">WMU Hunting Boundaries</div>
+                      <div className="legend-sub">Wildlife Management Units (hunting seasons & tags)</div>
+                    </div>
+                  </div>
+                )}
 
-            <div className="legend-item">
-              <span className="legend-swatch" style={{ background: '#06b6d4', opacity: 0.5 }} />
-              <div>
-                <div className="legend-name">Public Crown Parcels</div>
-                <div className="legend-sub">Verified public Crown tenure vs private patented lots</div>
-              </div>
-            </div>
+                {activeOverlays.unpatented && (
+                  <div className="legend-item">
+                    <span className="legend-swatch" style={{ background: '#06b6d4', opacity: 0.5 }} />
+                    <div>
+                      <div className="legend-name">Public Crown Parcels</div>
+                      <div className="legend-sub">Verified public Crown tenure vs private patented lots</div>
+                    </div>
+                  </div>
+                )}
 
-            <div className="legend-item">
-              <span className="legend-swatch-line" style={{ borderColor: '#ef4444', borderStyle: 'dashed' }} />
-              <div>
-                <div className="legend-name">Fire Bans (RFZ)</div>
-                <div className="legend-sub">Restricted fire zones (active campfire prohibitions)</div>
-              </div>
-            </div>
+                {activeOverlays.rfz && (
+                  <div className="legend-item">
+                    <span className="legend-swatch-line" style={{ borderColor: '#ef4444', borderStyle: 'dashed' }} />
+                    <div>
+                      <div className="legend-name">Fire Bans (RFZ)</div>
+                      <div className="legend-sub">Restricted fire zones (active campfire prohibitions)</div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <div className="legend-footer-tip">

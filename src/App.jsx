@@ -6,7 +6,7 @@ import ResultsList from './components/ResultsList';
 import PolicyModal from './components/PolicyModal';
 import GuideModal from './components/GuideModal';
 import { fetchClupaFeatures, batchFetchPermittedUses } from './services/clupaApi';
-import { MNR_DISTRICTS } from './data/districts';
+import { MNR_DISTRICTS, MNR_REGIONS } from './data/districts';
 import { PRESETS } from './data/presets';
 import { ACTIVITIES } from './data/activities';
 import { Map, List, Columns, AlertCircle } from 'lucide-react';
@@ -21,6 +21,7 @@ const INITIAL_FILTERS = {
 
 export default function App() {
   const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState(INITIAL_FILTERS);
   const [activePreset, setActivePreset] = useState(null);
   const [features, setFeatures] = useState([]);
   const [permittedUsesMap, setPermittedUsesMap] = useState({});
@@ -38,10 +39,30 @@ export default function App() {
   const [mapCenter, setMapCenter] = useState([45.35, -80.03]); // Parry Sound
   const [mapZoom, setMapZoom] = useState(9);
 
-  // Active district object
+  // Active district & region objects (derived from applied search)
   const currentDistrict = useMemo(() => {
-    return MNR_DISTRICTS.find(d => d.id === filters.districtId);
-  }, [filters.districtId]);
+    return MNR_DISTRICTS.find(d => d.id === appliedFilters.districtId);
+  }, [appliedFilters.districtId]);
+
+  const currentRegion = useMemo(() => {
+    return MNR_REGIONS.find(r => r.id === appliedFilters.regionId) || MNR_REGIONS[0];
+  }, [appliedFilters.regionId]);
+
+  // Check if there are unapplied filter changes
+  const hasPendingChanges = useMemo(() => {
+    return JSON.stringify(filters) !== JSON.stringify(appliedFilters);
+  }, [filters, appliedFilters]);
+
+  // Count actively applied filter constraints
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (appliedFilters.keyword?.trim()) count++;
+    if (appliedFilters.districtId) count++;
+    else if (appliedFilters.regionId && appliedFilters.regionId !== 'all') count++;
+    count += (appliedFilters.designations || []).length;
+    count += Object.keys(appliedFilters.activities || {}).length;
+    return count;
+  }, [appliedFilters]);
 
   // Load data from ArcGIS API
   const loadData = useCallback(async (currentFilters) => {
@@ -50,6 +71,8 @@ export default function App() {
 
     try {
       let bbox = null;
+      let queryLimit = 150;
+
       if (currentFilters.districtId) {
         const dist = MNR_DISTRICTS.find(d => d.id === currentFilters.districtId);
         if (dist && dist.bbox) {
@@ -57,13 +80,29 @@ export default function App() {
           setMapCenter(dist.center);
           setMapZoom(dist.zoom || 9);
         }
+      } else if (currentFilters.regionId && currentFilters.regionId !== 'all') {
+        const reg = MNR_REGIONS.find(r => r.id === currentFilters.regionId);
+        if (reg && reg.bbox) {
+          bbox = reg.bbox;
+          setMapCenter(reg.center);
+          setMapZoom(reg.zoom || 7);
+          queryLimit = 350;
+        }
+      } else {
+        const allReg = MNR_REGIONS.find(r => r.id === 'all');
+        if (allReg && allReg.bbox) {
+          bbox = allReg.bbox;
+          setMapCenter(allReg.center);
+          setMapZoom(allReg.zoom || 5);
+          queryLimit = 250;
+        }
       }
 
       const data = await fetchClupaFeatures({
         bbox,
         designations: currentFilters.designations,
         keyword: currentFilters.keyword,
-        limit: 120
+        limit: queryLimit
       });
 
       const loadedFeatures = data.features || [];
@@ -91,17 +130,20 @@ export default function App() {
     }
   }, []);
 
-  // Fetch when filters change (debounced for text search)
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      loadData(filters);
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [filters.districtId, filters.regionId, filters.designations, filters.keyword, loadData]);
+  // Apply current filter state to map search
+  const handleApplyFilters = useCallback(() => {
+    setAppliedFilters(filters);
+    loadData(filters);
+  }, [filters, loadData]);
 
-  // Filter features based on active activity requirements
+  // Initial load on mount
+  useEffect(() => {
+    loadData(INITIAL_FILTERS);
+  }, [loadData]);
+
+  // Filter features based on active activity requirements (derived from applied search)
   const filteredFeatures = useMemo(() => {
-    const activeActivityIds = Object.keys(filters.activities);
+    const activeActivityIds = Object.keys(appliedFilters.activities);
     if (activeActivityIds.length === 0) return features;
 
     return features.filter(feature => {
@@ -112,7 +154,7 @@ export default function App() {
 
       // Check every active activity filter
       return activeActivityIds.every(actId => {
-        const requiredStatus = filters.activities[actId]; // 'Yes' | 'Maybe' | 'No'
+        const requiredStatus = appliedFilters.activities[actId]; // 'Yes' | 'Maybe' | 'No'
         const actDef = ACTIVITIES.find(a => a.id === actId);
         if (!actDef) return true;
 
@@ -125,13 +167,15 @@ export default function App() {
         return matchingUse.PERMITTED_FLG_ENG === requiredStatus;
       });
     });
-  }, [features, filters.activities, permittedUsesMap]);
+  }, [features, appliedFilters.activities, permittedUsesMap]);
 
   // Handle Preset selection
   const handleSelectPreset = (presetId) => {
     if (!presetId) {
       setActivePreset(null);
       setFilters(INITIAL_FILTERS);
+      setAppliedFilters(INITIAL_FILTERS);
+      loadData(INITIAL_FILTERS);
       return;
     }
 
@@ -145,12 +189,16 @@ export default function App() {
       newActivities[a.id] = a.status;
     });
 
-    setFilters(prev => ({
-      ...prev,
+    const newFilters = {
+      ...filters,
       designations: preset.filters.designations || [],
       activities: newActivities,
       keyword: preset.filters.keyword || ''
-    }));
+    };
+
+    setFilters(newFilters);
+    setAppliedFilters(newFilters);
+    loadData(newFilters);
 
     // On mobile, close filter drawer to reveal map results
     if (typeof window !== 'undefined' && window.innerWidth <= 900) {
@@ -160,12 +208,15 @@ export default function App() {
 
   // Handle Town selection from quick hubs
   const handleSelectTown = (town) => {
-    setFilters(prev => ({
-      ...prev,
+    const updated = {
+      ...filters,
       districtId: town.districtId
-    }));
+    };
+    setFilters(updated);
+    setAppliedFilters(updated);
     setMapCenter(town.coords);
     setMapZoom(11);
+    loadData(updated);
 
     // On mobile, close filter drawer to reveal selected town
     if (typeof window !== 'undefined' && window.innerWidth <= 900) {
@@ -177,6 +228,8 @@ export default function App() {
   const handleResetFilters = () => {
     setActivePreset(null);
     setFilters(INITIAL_FILTERS);
+    setAppliedFilters(INITIAL_FILTERS);
+    loadData(INITIAL_FILTERS);
   };
 
   // Load data for custom map viewport (when user pans/zooms map)
@@ -220,8 +273,7 @@ export default function App() {
         onOpenGuide={() => setGuideOpen(true)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(prev => !prev)}
-        matchingCount={filteredFeatures.length}
-        loading={loading}
+        activeFilterCount={activeFilterCount}
       />
 
       <div className="app-main">
@@ -233,11 +285,17 @@ export default function App() {
             setFilters(newFilters);
           }}
           onResetFilters={handleResetFilters}
+          onApplyFilters={handleApplyFilters}
+          hasPendingChanges={hasPendingChanges}
           onSelectTown={handleSelectTown}
           matchingCount={filteredFeatures.length}
           loading={loading}
           collapsed={!sidebarOpen}
-          onCloseMobile={() => setSidebarOpen(false)}
+          onCloseMobile={() => {
+            if (window.innerWidth <= 900) {
+              setSidebarOpen(false);
+            }
+          }}
         />
 
         {/* Content Area */}
@@ -316,8 +374,12 @@ export default function App() {
                   isSplitView={viewMode === 'split'}
                   onSearchBbox={handleSearchBbox}
                   currentDistrict={currentDistrict}
+                  currentRegion={currentRegion}
                   onSelectDistrict={(distId) => {
-                    setFilters(prev => ({ ...prev, districtId: distId }));
+                    const updated = { ...filters, districtId: distId };
+                    setFilters(updated);
+                    setAppliedFilters(updated);
+                    loadData(updated);
                   }}
                 />
               </div>
@@ -353,11 +415,15 @@ export default function App() {
           {viewMode === 'map' && (
             <div className="results-summary-badge" id="map-results-summary">
               <span>Found <strong>{filteredFeatures.length}</strong> areas</span>
-              {currentDistrict && (
+              {currentDistrict ? (
                 <span style={{ color: 'var(--text-secondary)' }}>
                   in {currentDistrict.name} District
                 </span>
-              )}
+              ) : currentRegion && currentRegion.id !== 'all' ? (
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  in {currentRegion.name}
+                </span>
+              ) : null}
             </div>
           )}
         </main>
