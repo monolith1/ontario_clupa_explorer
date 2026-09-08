@@ -2,6 +2,8 @@
 
 A modern, fast, and intuitive explorer for the **Ontario Crown Land Use Policy Atlas (CLUPA)**. Designed for campers, hunters, anglers, off-road enthusiasts, and outdoor adventurers who want to easily find where they can legally access and enjoy public Crown land across Ontario.
 
+![Ontario CLUPA Explorer Preview](screenshot.png)
+
 ---
 
 ## ✨ Features
