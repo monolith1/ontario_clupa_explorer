@@ -27,7 +27,9 @@ export default function App() {
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [inspectedFeature, setInspectedFeature] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => 
+    typeof window !== 'undefined' ? window.innerWidth > 900 : true
+  );
   const [viewMode, setViewMode] = useState('map'); // 'map' | 'list' | 'split'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -149,6 +151,11 @@ export default function App() {
       activities: newActivities,
       keyword: preset.filters.keyword || ''
     }));
+
+    // On mobile, close filter drawer to reveal map results
+    if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+      setSidebarOpen(false);
+    }
   };
 
   // Handle Town selection from quick hubs
@@ -159,6 +166,11 @@ export default function App() {
     }));
     setMapCenter(town.coords);
     setMapZoom(11);
+
+    // On mobile, close filter drawer to reveal selected town
+    if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+      setSidebarOpen(false);
+    }
   };
 
   // Reset all filters
@@ -193,6 +205,7 @@ export default function App() {
           matchingCount={filteredFeatures.length}
           loading={loading}
           collapsed={!sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
         />
 
         {/* Content Area */}
@@ -209,7 +222,7 @@ export default function App() {
             </button>
             <button
               id="btn-view-split"
-              className={`view-mode-btn ${viewMode === 'split' ? 'active' : ''}`}
+              className={`view-mode-btn view-mode-btn-split ${viewMode === 'split' ? 'active' : ''}`}
               onClick={() => setViewMode('split')}
             >
               <Columns size={15} />

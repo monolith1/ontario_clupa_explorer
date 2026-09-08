@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { Layers, Crosshair, ZoomIn, ZoomOut, Maximize2, Flame, Trees, ShieldAlert, Sparkles } from 'lucide-react';
+import { Layers, Crosshair, ZoomIn, ZoomOut, Maximize2, Flame, Trees, ShieldAlert, Sparkles, X, Check } from 'lucide-react';
 import { LAND_DESIGNATIONS } from '../data/activities';
 import { fetchWmuFeatures, fetchUnpatentedParcels, fetchRestrictedFireZones } from '../services/clupaApi';
 
@@ -64,6 +64,9 @@ export default function MapView({
     rfz: false
   });
   const [loadingOverlay, setLoadingOverlay] = useState(null); // 'wmu' | 'unpatented' | 'rfz' | null
+  const [mobileLayersOpen, setMobileLayersOpen] = useState(false);
+
+  const activeOverlayCount = Object.values(activeOverlays).filter(Boolean).length;
 
   // Initialize Map
   useEffect(() => {
@@ -442,56 +445,176 @@ export default function MapView({
       {/* Map DOM Element */}
       <div ref={mapContainerRef} className="map-element" id="leaflet-map" />
 
-      {/* Basemap Switcher (Top Right) */}
-      <div className="map-basemap-selector" id="basemap-selector">
-        {Object.keys(BASEMAPS).map((key) => (
+      {/* Desktop Controls (Hidden on Mobile) */}
+      <div className="map-desktop-controls">
+        {/* Basemap Switcher (Top Right) */}
+        <div className="map-basemap-selector" id="basemap-selector">
+          {Object.keys(BASEMAPS).map((key) => (
+            <button
+              key={key}
+              id={`basemap-${key}`}
+              className={`basemap-btn ${activeBasemap === key ? 'active' : ''}`}
+              onClick={() => setActiveBasemap(key)}
+            >
+              {BASEMAPS[key].name}
+            </button>
+          ))}
+        </div>
+
+        {/* Map Overlays Toolbar (Stacked below Basemaps) */}
+        <div className="map-overlay-selector" id="map-overlay-selector">
+          <span className="overlay-selector-label">Overlays:</span>
           <button
-            key={key}
-            id={`basemap-${key}`}
-            className={`basemap-btn ${activeBasemap === key ? 'active' : ''}`}
-            onClick={() => setActiveBasemap(key)}
+            id="overlay-btn-wmu"
+            className={`overlay-chip-btn ${activeOverlays.wmu ? 'active-wmu' : ''}`}
+            onClick={() => toggleOverlay('wmu')}
+            title="Toggle Wildlife Management Units (WMU) Hunting Boundaries"
           >
-            {BASEMAPS[key].name}
+            <Crosshair size={13} />
+            <span>WMU Units</span>
+            {loadingOverlay === 'wmu' && <span className="spinner" style={{ width: 10, height: 10 }} />}
           </button>
-        ))}
+
+          <button
+            id="overlay-btn-unpatented"
+            className={`overlay-chip-btn ${activeOverlays.unpatented ? 'active-unpatented' : ''}`}
+            onClick={() => toggleOverlay('unpatented')}
+            title="Toggle Unpatented Crown Land Parcels (Exact Public Tenure vs Private Lots)"
+          >
+            <Trees size={13} />
+            <span>Public Parcels</span>
+            {loadingOverlay === 'unpatented' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+          </button>
+
+          <button
+            id="overlay-btn-rfz"
+            className={`overlay-chip-btn ${activeOverlays.rfz ? 'active-rfz' : ''}`}
+            onClick={() => toggleOverlay('rfz')}
+            title="Toggle Restricted Fire Zones (Active Fire Bans & Campfire Prohibitions)"
+          >
+            <Flame size={13} />
+            <span>Fire Bans (RFZ)</span>
+            {loadingOverlay === 'rfz' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+          </button>
+        </div>
       </div>
 
-      {/* Map Overlays Toolbar (Stacked below Basemaps) */}
-      <div className="map-overlay-selector" id="map-overlay-selector">
-        <span className="overlay-selector-label">Overlays:</span>
-        <button
-          id="overlay-btn-wmu"
-          className={`overlay-chip-btn ${activeOverlays.wmu ? 'active-wmu' : ''}`}
-          onClick={() => toggleOverlay('wmu')}
-          title="Toggle Wildlife Management Units (WMU) Hunting Boundaries"
-        >
-          <Crosshair size={13} />
-          <span>WMU Units</span>
-          {loadingOverlay === 'wmu' && <span className="spinner" style={{ width: 10, height: 10 }} />}
-        </button>
+      {/* Mobile Layer Settings Button (Top Right on Mobile) */}
+      <button
+        id="btn-mobile-layers"
+        className={`mobile-layers-btn ${mobileLayersOpen ? 'active' : ''}`}
+        onClick={() => setMobileLayersOpen(!mobileLayersOpen)}
+        aria-label="Map layers and basemaps"
+        title="Toggle Map Basemaps and Overlays"
+      >
+        <Layers size={16} />
+        <span>Layers</span>
+        {activeOverlayCount > 0 && (
+          <span className="mobile-layers-badge">{activeOverlayCount}</span>
+        )}
+      </button>
 
-        <button
-          id="overlay-btn-unpatented"
-          className={`overlay-chip-btn ${activeOverlays.unpatented ? 'active-unpatented' : ''}`}
-          onClick={() => toggleOverlay('unpatented')}
-          title="Toggle Unpatented Crown Land Parcels (Exact Public Tenure vs Private Lots)"
-        >
-          <Trees size={13} />
-          <span>Public Parcels</span>
-          {loadingOverlay === 'unpatented' && <span className="spinner" style={{ width: 10, height: 10 }} />}
-        </button>
+      {/* Mobile Layers Drawer / Popover */}
+      {mobileLayersOpen && (
+        <div className="mobile-layers-popover" id="mobile-layers-popover">
+          <div className="mobile-layers-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Layers size={16} className="text-emerald" />
+              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Map Layers & Overlays</span>
+            </div>
+            <button
+              className="btn-close-popover"
+              onClick={() => setMobileLayersOpen(false)}
+              aria-label="Close layers menu"
+            >
+              <X size={16} />
+            </button>
+          </div>
 
-        <button
-          id="overlay-btn-rfz"
-          className={`overlay-chip-btn ${activeOverlays.rfz ? 'active-rfz' : ''}`}
-          onClick={() => toggleOverlay('rfz')}
-          title="Toggle Restricted Fire Zones (Active Fire Bans & Campfire Prohibitions)"
-        >
-          <Flame size={13} />
-          <span>Fire Bans (RFZ)</span>
-          {loadingOverlay === 'rfz' && <span className="spinner" style={{ width: 10, height: 10 }} />}
-        </button>
-      </div>
+          {/* Basemap Section */}
+          <div className="mobile-layers-section">
+            <div className="mobile-layers-section-title">Basemap</div>
+            <div className="mobile-basemaps-grid">
+              {Object.keys(BASEMAPS).map((key) => (
+                <button
+                  key={key}
+                  className={`mobile-basemap-card ${activeBasemap === key ? 'active' : ''}`}
+                  onClick={() => setActiveBasemap(key)}
+                >
+                  <span className="mobile-basemap-card-name">{BASEMAPS[key].name}</span>
+                  {activeBasemap === key && <Check size={14} className="text-emerald" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Geospatial Overlays Section */}
+          <div className="mobile-layers-section">
+            <div className="mobile-layers-section-title">Geospatial Overlays</div>
+            <div className="mobile-overlays-list">
+              <button
+                className={`mobile-overlay-row ${activeOverlays.wmu ? 'active-wmu' : ''}`}
+                onClick={() => toggleOverlay('wmu')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <Crosshair size={15} style={{ color: '#f59e0b' }} />
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.84rem' }}>WMU Hunting Units</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Wildlife management boundaries</div>
+                  </div>
+                </div>
+                {loadingOverlay === 'wmu' ? (
+                  <span className="spinner" style={{ width: 12, height: 12 }} />
+                ) : (
+                  <span className={`toggle-pill ${activeOverlays.wmu ? 'on-wmu' : 'off'}`}>
+                    {activeOverlays.wmu ? 'ON' : 'OFF'}
+                  </span>
+                )}
+              </button>
+
+              <button
+                className={`mobile-overlay-row ${activeOverlays.unpatented ? 'active-unpatented' : ''}`}
+                onClick={() => toggleOverlay('unpatented')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <Trees size={15} style={{ color: '#06b6d4' }} />
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.84rem' }}>Public Parcels</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Unpatented Crown land survey</div>
+                  </div>
+                </div>
+                {loadingOverlay === 'unpatented' ? (
+                  <span className="spinner" style={{ width: 12, height: 12 }} />
+                ) : (
+                  <span className={`toggle-pill ${activeOverlays.unpatented ? 'on-unpatented' : 'off'}`}>
+                    {activeOverlays.unpatented ? 'ON' : 'OFF'}
+                  </span>
+                )}
+              </button>
+
+              <button
+                className={`mobile-overlay-row ${activeOverlays.rfz ? 'active-rfz' : ''}`}
+                onClick={() => toggleOverlay('rfz')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <Flame size={15} style={{ color: '#ef4444' }} />
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.84rem' }}>Fire Bans (RFZ)</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Restricted fire zones</div>
+                  </div>
+                </div>
+                {loadingOverlay === 'rfz' ? (
+                  <span className="spinner" style={{ width: 12, height: 12 }} />
+                ) : (
+                  <span className={`toggle-pill ${activeOverlays.rfz ? 'on-rfz' : 'off'}`}>
+                    {activeOverlays.rfz ? 'ON' : 'OFF'}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Map Control Buttons */}
       <div style={{ position: 'absolute', bottom: 85, right: 10, zIndex: 500, display: 'flex', flexDirection: 'column', gap: 6 }}>

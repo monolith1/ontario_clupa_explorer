@@ -26,7 +26,8 @@ export default function FilterPanel({
   onSelectTown,
   matchingCount,
   loading,
-  collapsed
+  collapsed,
+  onCloseMobile
 }) {
   const {
     keyword,
@@ -86,7 +87,7 @@ export default function FilterPanel({
   const isFiltered = keyword || districtId || (regionId && regionId !== 'all') || designations.length > 0 || activeActivityFilterCount > 0;
 
   return (
-    <aside className={`sidebar-panel ${collapsed ? 'collapsed' : ''}`} id="sidebar-filters">
+    <aside className={`sidebar-panel ${collapsed ? 'collapsed' : 'mobile-open'}`} id="sidebar-filters">
       {/* Sidebar Header */}
       <div className="sidebar-header">
         <div className="sidebar-title-group">
@@ -99,17 +100,28 @@ export default function FilterPanel({
           )}
         </div>
 
-        {isFiltered && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {isFiltered && (
+            <button
+              id="btn-reset-all-filters"
+              className="btn-reset-filters"
+              onClick={onResetFilters}
+              title="Reset all search filters"
+            >
+              <RotateCcw size={14} style={{ display: 'inline', marginRight: 4 }} />
+              Reset
+            </button>
+          )}
           <button
-            id="btn-reset-all-filters"
-            className="btn-reset-filters"
-            onClick={onResetFilters}
-            title="Reset all search filters"
+            id="btn-close-sidebar-mobile"
+            className="mobile-sidebar-close-btn"
+            onClick={onCloseMobile}
+            title="Close filters"
+            aria-label="Close filters"
           >
-            <RotateCcw size={14} style={{ display: 'inline', marginRight: 4 }} />
-            Reset
+            <X size={18} />
           </button>
-        )}
+        </div>
       </div>
 
       <div className="sidebar-content">
@@ -297,6 +309,17 @@ export default function FilterPanel({
             })}
           </div>
         </section>
+      </div>
+
+      {/* Mobile Sticky Action Footer */}
+      <div className="sidebar-mobile-footer">
+        <button
+          id="btn-apply-filters-mobile"
+          className="btn-sidebar-apply"
+          onClick={onCloseMobile}
+        >
+          <span>View {loading ? '...' : (matchingCount ?? 0)} Areas on Map</span>
+        </button>
       </div>
     </aside>
   );

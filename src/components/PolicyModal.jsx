@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, ExternalLink, MapPin, Copy, Check, Download, Search, FileText, Compass, AlertCircle } from 'lucide-react';
+import { X, ExternalLink, MapPin, Copy, Check, Download, Search, FileText, Compass, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { fetchPolicyDetails, fetchPermittedUses } from '../services/clupaApi';
 import { LAND_DESIGNATIONS } from '../data/activities';
 
@@ -26,6 +26,7 @@ export default function PolicyModal({ feature, onClose }) {
   const [permittedUses, setPermittedUses] = useState([]);
   const [activitySearch, setActivitySearch] = useState('');
   const [copiedCoords, setCopiedCoords] = useState(false);
+  const [intentExpanded, setIntentExpanded] = useState(false);
 
   // Extract approximate center coordinates from geometry
   let centerCoords = [46.0, -80.0];
@@ -137,24 +138,39 @@ export default function PolicyModal({ feature, onClose }) {
             </div>
           ) : (
             <>
-              {/* Land Use Intent */}
+              {/* 1. Government Management Intent (Collapsible Accordion - collapsed by default so Area Description is immediately visible) */}
               {policyData?.LAND_USE_INTENT_DESCR_ENG && (
                 <div className="policy-block">
-                  <div className="policy-block-title">
-                    <Compass size={15} className="text-emerald" />
-                    <span>Government Management Intent</span>
-                  </div>
-                  <div className="policy-text-card">
-                    {policyData.LAND_USE_INTENT_DESCR_ENG}
-                  </div>
+                  <button
+                    type="button"
+                    id="btn-toggle-management-intent"
+                    className="collapsible-block-btn"
+                    onClick={() => setIntentExpanded(!intentExpanded)}
+                    aria-expanded={intentExpanded}
+                  >
+                    <div className="policy-block-title" style={{ margin: 0 }}>
+                      <Compass size={15} className="text-emerald" />
+                      <span>Government Management Intent</span>
+                      <span className="collapsible-badge">
+                        {intentExpanded ? 'Collapse' : 'Tap to expand'}
+                      </span>
+                    </div>
+                    {intentExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+
+                  {intentExpanded && (
+                    <div className="policy-text-card intent-expanded-card">
+                      {policyData.LAND_USE_INTENT_DESCR_ENG}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Land Area Description */}
+              {/* 2. Land Area Description & Setting */}
               {policyData?.LAND_AREA_DESCR_ENG && (
                 <div className="policy-block">
                   <div className="policy-block-title">
-                    <FileText size={15} />
+                    <FileText size={15} className="text-emerald" />
                     <span>Area Description & Setting</span>
                   </div>
                   <div className="policy-text-card">
