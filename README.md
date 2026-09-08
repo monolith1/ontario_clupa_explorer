@@ -48,6 +48,14 @@ Unlike the legacy atlas, start directly with the activities you care about. Togg
 
 ---
 
+### 🎯 Specialized Geospatial Overlays
+Toggle three official Ontario provincial layers directly on top of the Crown land map:
+* 🎯 **Wildlife Management Units (WMU)**: Official hunting zone boundaries and unit numbers across the province. Click any unit to view hunting season information.
+* 🌲 **Unpatented Crown Land Parcels**: Shows exact public Crown ownership boundaries to distinguish public land from private inholdings and waterfront cottage lots.
+* 🔥 **Restricted Fire Zones (RFZ)**: Live boundaries of active ministerial fire restriction orders showing where outdoor campfires are currently prohibited.
+
+---
+
 ### 📋 Deep-Dive Policy Inspector
 Click on any area card or map polygon to inspect:
 * **Government Management Intent**: Read official Ministry directives on how the land is managed.

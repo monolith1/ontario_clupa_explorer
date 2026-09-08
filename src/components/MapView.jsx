@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { Layers, Crosshair, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Layers, Crosshair, ZoomIn, ZoomOut, Maximize2, Flame, Trees, ShieldAlert, Sparkles } from 'lucide-react';
 import { LAND_DESIGNATIONS } from '../data/activities';
+import { fetchWmuFeatures, fetchUnpatentedParcels, fetchRestrictedFireZones } from '../services/clupaApi';
 
-// Tile Layer definitions
 // Free, public basemap tiles without API keys or watermarks
 const BASEMAPS = {
   dark: {
@@ -42,8 +42,8 @@ export default function MapView({
   features = [],
   selectedFeature,
   onSelectFeature,
-  mapCenter = [46.0, -80.0],
-  mapZoom = 7,
+  mapCenter = [45.35, -80.03],
+  mapZoom = 9,
   onBoundsChange
 }) {
   const mapContainerRef = useRef(null);
@@ -51,7 +51,19 @@ export default function MapView({
   const geoJsonLayerRef = useRef(null);
   const tileLayerRef = useRef(null);
   const labelLayerRef = useRef(null);
+
+  // Overlay layer refs
+  const wmuLayerRef = useRef(null);
+  const unpatentedLayerRef = useRef(null);
+  const rfzLayerRef = useRef(null);
+
   const [activeBasemap, setActiveBasemap] = useState('dark');
+  const [activeOverlays, setActiveOverlays] = useState({
+    wmu: false,
+    unpatented: false,
+    rfz: false
+  });
+  const [loadingOverlay, setLoadingOverlay] = useState(null); // 'wmu' | 'unpatented' | 'rfz' | null
 
   // Initialize Map
   useEffect(() => {
@@ -86,14 +98,19 @@ export default function MapView({
     map.on('moveend', () => {
       clearTimeout(moveTimeout);
       moveTimeout = setTimeout(() => {
+        const bounds = map.getBounds();
+        const bbox = [
+          bounds.getWest(),
+          bounds.getSouth(),
+          bounds.getEast(),
+          bounds.getNorth()
+        ];
         if (onBoundsChange) {
-          const bounds = map.getBounds();
-          onBoundsChange([
-            bounds.getWest(),
-            bounds.getSouth(),
-            bounds.getEast(),
-            bounds.getNorth()
-          ]);
+          onBoundsChange(bbox);
+        }
+        // If unpatented overlay is active, re-fetch for new viewport
+        if (activeOverlays.unpatented) {
+          loadUnpatentedOverlay(bbox);
         }
       }, 500);
     });
@@ -109,7 +126,6 @@ export default function MapView({
     if (!mapInstanceRef.current || !tileLayerRef.current) return;
     const config = BASEMAPS[activeBasemap];
 
-    // Remove existing tile and label layers
     mapInstanceRef.current.removeLayer(tileLayerRef.current);
     if (labelLayerRef.current) {
       mapInstanceRef.current.removeLayer(labelLayerRef.current);
@@ -129,7 +145,7 @@ export default function MapView({
     }
   }, [activeBasemap]);
 
-  // Update GeoJSON Polygons
+  // Update CLUPA Provincial Polygons
   useEffect(() => {
     if (!mapInstanceRef.current) return;
 
@@ -171,7 +187,7 @@ export default function MapView({
             <strong style="color: var(--emerald-primary); font-size: 13px;">${ident}</strong> - ${name}<br/>
             <span style="color: #94a3b8;">${desig} • ${areaHa} ha</span>
           </div>
-        `, { sticky: true, className: 'map-custom-tooltip' });
+        `, { sticky: true });
 
         // Click handler
         featureLayer.on('click', () => {
@@ -221,6 +237,172 @@ export default function MapView({
     }
   }, [selectedFeature]);
 
+  // Overlay 1: WMU (Wildlife Management Units)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (!activeOverlays.wmu) {
+      if (wmuLayerRef.current) {
+        mapInstanceRef.current.removeLayer(wmuLayerRef.current);
+        wmuLayerRef.current = null;
+      }
+      return;
+    }
+
+    if (wmuLayerRef.current) return;
+
+    setLoadingOverlay('wmu');
+    fetchWmuFeatures().then((data) => {
+      if (!mapInstanceRef.current || !activeOverlays.wmu) {
+        setLoadingOverlay(null);
+        return;
+      }
+
+      const layer = L.geoJSON(data, {
+        style: {
+          color: '#f59e0b', // Amber
+          weight: 2,
+          dashArray: '5, 5',
+          fillColor: '#f59e0b',
+          fillOpacity: 0.04
+        },
+        onEachFeature: (feat, l) => {
+          const unit = feat.properties?.OFFICIAL_NAME || 'Unknown';
+          l.bindTooltip(`WMU ${unit}`, {
+            permanent: true,
+            direction: 'center',
+            className: 'wmu-label-tooltip'
+          });
+          l.bindPopup(`
+            <div style="font-family: var(--font-body); padding: 4px;">
+              <strong style="color: #f59e0b; font-size: 14px;">🎯 Wildlife Management Unit: WMU ${unit}</strong>
+              <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">
+                Ontario Hunting Regulations apply. Open seasons, moose/deer/bear tags, and firearm discharge rules are regulated by WMU ${unit}.
+              </div>
+            </div>
+          `);
+        }
+      }).addTo(mapInstanceRef.current);
+
+      wmuLayerRef.current = layer;
+      setLoadingOverlay(null);
+    }).catch(() => setLoadingOverlay(null));
+  }, [activeOverlays.wmu]);
+
+  // Overlay 2: Unpatented Crown Land Parcels loader
+  const loadUnpatentedOverlay = useCallback((bbox) => {
+    if (!mapInstanceRef.current || !bbox) return;
+
+    setLoadingOverlay('unpatented');
+    fetchUnpatentedParcels({ bbox, limit: 120 }).then((data) => {
+      if (!mapInstanceRef.current) {
+        setLoadingOverlay(null);
+        return;
+      }
+
+      if (unpatentedLayerRef.current) {
+        mapInstanceRef.current.removeLayer(unpatentedLayerRef.current);
+      }
+
+      const layer = L.geoJSON(data, {
+        style: {
+          color: '#06b6d4', // Cyan
+          weight: 1.5,
+          fillColor: '#06b6d4',
+          fillOpacity: 0.28
+        },
+        onEachFeature: (feat, l) => {
+          const p = feat.properties || {};
+          const area = p.AREA_IN_HA ? Math.round(p.AREA_IN_HA).toLocaleString() + ' ha' : 'N/A';
+          const loc = p.SURVEY_LOCATION_IDENT || 'Unpatented Crown parcel';
+          l.bindPopup(`
+            <div style="font-family: var(--font-body); padding: 4px;">
+              <strong style="color: #06b6d4; font-size: 14px;">🌲 Unpatented Crown Land Parcel</strong>
+              <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">
+                <strong>Survey:</strong> ${loc}<br/>
+                <strong>Area:</strong> ${area}<br/>
+                <span style="color: #22d3ee;">Official Public Crown Land Tenure</span>
+              </div>
+            </div>
+          `);
+        }
+      }).addTo(mapInstanceRef.current);
+
+      unpatentedLayerRef.current = layer;
+      setLoadingOverlay(null);
+    }).catch(() => setLoadingOverlay(null));
+  }, []);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (!activeOverlays.unpatented) {
+      if (unpatentedLayerRef.current) {
+        mapInstanceRef.current.removeLayer(unpatentedLayerRef.current);
+        unpatentedLayerRef.current = null;
+      }
+      return;
+    }
+
+    const bounds = mapInstanceRef.current.getBounds();
+    const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+    loadUnpatentedOverlay(bbox);
+  }, [activeOverlays.unpatented, loadUnpatentedOverlay]);
+
+  // Overlay 3: Restricted Fire Zones (RFZ)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (!activeOverlays.rfz) {
+      if (rfzLayerRef.current) {
+        mapInstanceRef.current.removeLayer(rfzLayerRef.current);
+        rfzLayerRef.current = null;
+      }
+      return;
+    }
+
+    if (rfzLayerRef.current) return;
+
+    setLoadingOverlay('rfz');
+    fetchRestrictedFireZones().then((data) => {
+      if (!mapInstanceRef.current || !activeOverlays.rfz) {
+        setLoadingOverlay(null);
+        return;
+      }
+
+      const layer = L.geoJSON(data, {
+        style: {
+          color: '#ef4444', // Red
+          weight: 2,
+          dashArray: '6, 6',
+          fillColor: '#ef4444',
+          fillOpacity: 0.16
+        },
+        onEachFeature: (feat, l) => {
+          const name = feat.properties?.OFFICIAL_NAME || '';
+          l.bindPopup(`
+            <div style="font-family: var(--font-body); padding: 4px;">
+              <strong style="color: #ef4444; font-size: 14px;">🔥 Restricted Fire Zone: Zone ${name}</strong>
+              <div style="color: #fca5a5; font-size: 12px; margin-top: 4px;">
+                Open campfires, bonfires, and charcoal BBQs are <strong>PROHIBITED</strong> in this zone during active fire orders. Portable gas/propane camping stoves only.
+              </div>
+            </div>
+          `);
+        }
+      }).addTo(mapInstanceRef.current);
+
+      rfzLayerRef.current = layer;
+      setLoadingOverlay(null);
+    }).catch(() => setLoadingOverlay(null));
+  }, [activeOverlays.rfz]);
+
+  const toggleOverlay = (key) => {
+    setActiveOverlays(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
   // Handle Locate Me (GPS)
   const handleLocateMe = () => {
     if (!mapInstanceRef.current) return;
@@ -260,7 +442,7 @@ export default function MapView({
       {/* Map DOM Element */}
       <div ref={mapContainerRef} className="map-element" id="leaflet-map" />
 
-      {/* Basemap Switcher */}
+      {/* Basemap Switcher (Top Right) */}
       <div className="map-basemap-selector" id="basemap-selector">
         {Object.keys(BASEMAPS).map((key) => (
           <button
@@ -272,6 +454,43 @@ export default function MapView({
             {BASEMAPS[key].name}
           </button>
         ))}
+      </div>
+
+      {/* Map Overlays Toolbar (Stacked below Basemaps) */}
+      <div className="map-overlay-selector" id="map-overlay-selector">
+        <span className="overlay-selector-label">Overlays:</span>
+        <button
+          id="overlay-btn-wmu"
+          className={`overlay-chip-btn ${activeOverlays.wmu ? 'active-wmu' : ''}`}
+          onClick={() => toggleOverlay('wmu')}
+          title="Toggle Wildlife Management Units (WMU) Hunting Boundaries"
+        >
+          <Crosshair size={13} />
+          <span>WMU Units</span>
+          {loadingOverlay === 'wmu' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+        </button>
+
+        <button
+          id="overlay-btn-unpatented"
+          className={`overlay-chip-btn ${activeOverlays.unpatented ? 'active-unpatented' : ''}`}
+          onClick={() => toggleOverlay('unpatented')}
+          title="Toggle Unpatented Crown Land Parcels (Exact Public Tenure vs Private Lots)"
+        >
+          <Trees size={13} />
+          <span>Public Parcels</span>
+          {loadingOverlay === 'unpatented' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+        </button>
+
+        <button
+          id="overlay-btn-rfz"
+          className={`overlay-chip-btn ${activeOverlays.rfz ? 'active-rfz' : ''}`}
+          onClick={() => toggleOverlay('rfz')}
+          title="Toggle Restricted Fire Zones (Active Fire Bans & Campfire Prohibitions)"
+        >
+          <Flame size={13} />
+          <span>Fire Bans (RFZ)</span>
+          {loadingOverlay === 'rfz' && <span className="spinner" style={{ width: 10, height: 10 }} />}
+        </button>
       </div>
 
       {/* Map Control Buttons */}

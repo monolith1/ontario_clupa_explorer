@@ -234,3 +234,92 @@ export async function fetchDistrictsForPolicy(clupaPolicyId) {
     return [];
   }
 }
+
+/**
+ * Overlay 1: Wildlife Management Units (WMU)
+ * LIO_Open05 Layer 5
+ */
+export async function fetchWmuFeatures() {
+  const cacheKey = 'overlay_wmu_all';
+  if (memoryCache.has(cacheKey)) {
+    return memoryCache.get(cacheKey);
+  }
+
+  const url = '/api-lio/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open05/MapServer/5/query?where=1%3D1&outFields=OFFICIAL_NAME,OGF_ID&returnGeometry=true&f=geojson&maxAllowableOffset=0.005&resultRecordCount=200';
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('WMU fetch failed');
+    const data = await res.json();
+    memoryCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    console.warn('Failed to load WMU overlay:', err);
+    return { type: 'FeatureCollection', features: [] };
+  }
+}
+
+/**
+ * Overlay 2: Unpatented Crown Land Parcels
+ * LIO_Open08 Layer 34
+ */
+export async function fetchUnpatentedParcels({ bbox = null, limit = 80 } = {}) {
+  if (!bbox) return { type: 'FeatureCollection', features: [] };
+
+  const cacheKey = `overlay_unpatented_${bbox.join(',')}_${limit}`;
+  if (memoryCache.has(cacheKey)) {
+    return memoryCache.get(cacheKey);
+  }
+
+  const params = new URLSearchParams({
+    where: '1=1',
+    geometry: bbox.join(','),
+    geometryType: 'esriGeometryEnvelope',
+    spatialRel: 'esriSpatialRelIntersects',
+    inSR: '4326',
+    outSR: '4326',
+    outFields: 'OGF_ID,SURVEY_LOCATION_IDENT,AREA_IN_HA',
+    returnGeometry: 'true',
+    f: 'geojson',
+    maxAllowableOffset: '0.002',
+    resultRecordCount: limit.toString()
+  });
+
+  const url = `/api-lio/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/34/query?${params.toString()}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Unpatented parcels fetch failed');
+    const data = await res.json();
+    memoryCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    console.warn('Failed to load Unpatented Crown Land overlay:', err);
+    return { type: 'FeatureCollection', features: [] };
+  }
+}
+
+/**
+ * Overlay 3: Restricted Fire Zones (RFZ)
+ * LIO_Open08 Layer 28
+ */
+export async function fetchRestrictedFireZones() {
+  const cacheKey = 'overlay_rfz_all';
+  if (memoryCache.has(cacheKey)) {
+    return memoryCache.get(cacheKey);
+  }
+
+  const url = '/api-lio/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/28/query?where=1%3D1&outFields=OFFICIAL_NAME,BUSINESS_EFFECTIVE_DATE&returnGeometry=true&f=geojson&maxAllowableOffset=0.005&resultRecordCount=100';
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('RFZ fetch failed');
+    const data = await res.json();
+    memoryCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    console.warn('Failed to load RFZ overlay:', err);
+    return { type: 'FeatureCollection', features: [] };
+  }
+}
+
